@@ -4,10 +4,15 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-# Biblioteki ML
+# Nowe biblioteki do wizualizacji i ML
+import plotly.express as px
+import plotly.graph_objects as go
+import xgboost as xgb
+
+# Biblioteki ML (Scikit-learn)
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import r2_score, mean_absolute_error
+from sklearn.metrics import r2_score, mean_absolute_error, mean_squared_error
 
 # Konfiguracja strony
 st.set_page_config(page_title="Wino Expert - Analytics Dashboard", layout="wide")
@@ -31,18 +36,18 @@ df_red, df_pair = load_data()
 
 if df_red is not None and df_pair is not None:
     
-    st.title("🍷 Wino Expert: Analityka, AI i Sommelier")
-    st.markdown("Zaawansowane narzędzie do wizualizacji danych winiarskich i predykcji jakości.")
+    st.title("🍷 Wino Expert: Hybrydowa Analityka i AI")
+    st.markdown("Połączenie klasycznej analizy statystycznej z nowoczesną wizualizacją 3D i modelowaniem XGBoost.")
 
-    # 4 Zakładki zamiast 3
+    # 4 Zakładki
     tab1, tab2, tab3, tab4 = st.tabs([
-        "📈 Eksploracja Danych (EDA)", 
-        "🔬 Zaawansowana Wizualizacja",
-        "🤖 Model AI & Ważność Cech",
+        "📈 Eksploracja (Seaborn)", 
+        "🔬 Zaawansowana Wizualizacja (Plotly)", # Tu są nowe metody wizualizacji
+        "🤖 Modele AI (RF vs XGBoost)",          # Tu jest nowy model
         "🍽️ Sommelier"
     ])
 
-    # --- ZAKŁADKA 1: EKSPLORACJA (EDA) ---
+    # --- ZAKŁADKA 1: EKSPLORACJA (EDA - Twój oryginalny kod) ---
     with tab1:
         st.header("Podstawowa analiza statystyczna")
         
@@ -69,129 +74,152 @@ if df_red is not None and df_pair is not None:
             st.subheader("Statystyki szczegółowe")
             st.dataframe(df_red.describe().T.style.background_gradient(cmap="Reds"))
 
-    # --- ZAKŁADKA 2: ZAAWANSOWANA WIZUALIZACJA ---
+    # --- ZAKŁADKA 2: ZAAWANSOWANA WIZUALIZACJA (Nowe 3 metody Plotly) ---
     with tab2:
-        st.header("Kreator Wykresów")
-        st.markdown("Szukaj zależności pomiędzy dowolnymi parametrami.")
+        st.header("Interaktywna Analityka (Plotly)")
+        st.markdown("Trzy metody zaawansowanej wizualizacji danych.")
         
-        c1, c2, c3 = st.columns(3)
-        x_axis = c1.selectbox("Oś X", df_red.columns, index=10) # Domyślnie alcohol
-        y_axis = c2.selectbox("Oś Y", df_red.columns, index=1)  # Domyślnie volatile acidity
-        color_by = c3.selectbox("Kolorowanie (Hue)", [None, 'quality'], index=1)
+        # Metoda 1: 3D Scatter Plot
+        st.subheader("1. Analiza Przestrzenna (3D)")
+        c3d_1, c3d_2, c3d_3 = st.columns(3)
+        x_3d = c3d_1.selectbox("Oś X (3D)", df_red.columns, index=10) # Alcohol
+        y_3d = c3d_2.selectbox("Oś Y (3D)", df_red.columns, index=1)  # Volatile Acidity
+        z_3d = c3d_3.selectbox("Oś Z (3D)", df_red.columns, index=9)  # Sulphates
         
-        # Wykres punktowy (Scatter Plot)
-        fig_scatter, ax_scatter = plt.subplots(figsize=(10, 6))
-        
-        if color_by == 'quality':
-            # Traktujemy jakość jako kategorię dla lepszych kolorów
-            sns.scatterplot(data=df_red, x=x_axis, y=y_axis, hue='quality', palette='viridis', ax=ax_scatter, s=60, alpha=0.7)
-        else:
-            sns.scatterplot(data=df_red, x=x_axis, y=y_axis, color='darkred', ax=ax_scatter, s=60, alpha=0.7)
-            
-        ax_scatter.set_title(f"Zależność: {x_axis} vs {y_axis}")
-        st.pyplot(fig_scatter)
+        fig_3d = px.scatter_3d(
+            df_red, x=x_3d, y=y_3d, z=z_3d,
+            color='quality', opacity=0.7,
+            color_continuous_scale='Viridis',
+            title="Wykres 3D (Obracaj myszką)"
+        )
+        st.plotly_chart(fig_3d, use_container_width=True)
         
         st.divider()
-        st.subheader("Filtrowanie danych")
         
-        # Prosty filtr
-        min_quality = st.slider("Pokaż wina o jakości co najmniej:", 3, 8, 5)
-        filtered_df = df_red[df_red['quality'] >= min_quality]
+        col_v1, col_v2 = st.columns(2)
         
-        st.write(f"Znaleziono **{filtered_df.shape[0]}** win spełniających kryteria.")
-        with st.expander("Pokaż przefiltrowaną tabelę"):
-            st.dataframe(filtered_df)
+        # Metoda 2: Violin Plot
+        with col_v1:
+            st.subheader("2. Rozkład Gęstości (Violin Plot)")
+            feat_violin = st.selectbox("Wybierz cechę dla wykresu skrzypcowego:", df_red.columns[:-1], index=0)
             
-            # Opcja pobrania danych
-            csv = filtered_df.to_csv(index=False).encode('utf-8')
-            st.download_button(
-                "📥 Pobierz przefiltrowane dane (CSV)",
-                csv,
-                "filtered_wine.csv",
-                "text/csv",
-                key='download-csv'
+            fig_violin = px.violin(
+                df_red, y=feat_violin, x="quality", 
+                color="quality", box=True, points="all",
+                title=f"Rozkład {feat_violin} wg oceny jakości"
             )
+            st.plotly_chart(fig_violin, use_container_width=True)
+            
+        # Metoda 3: Parallel Coordinates
+        with col_v2:
+            st.subheader("3. Współrzędne Równoległe")
+            st.markdown("Śledź profil chemiczny dobrych win (jasne kolory).")
+            
+            # Wybieramy tylko kilka kluczowych kolumn dla czytelności
+            cols_parallel = ['alcohol', 'sulphates', 'volatile acidity', 'pH', 'quality']
+            
+            fig_par = px.parallel_coordinates(
+                df_red[cols_parallel], 
+                color="quality",
+                color_continuous_scale=px.colors.diverging.Tealrose,
+                title="Profil Chemiczny Wina"
+            )
+            st.plotly_chart(fig_par, use_container_width=True)
 
-    # --- ZAKŁADKA 3: MODEL AI & FEATURE IMPORTANCE ---
+    # --- ZAKŁADKA 3: MODEL AI (RF + XGBoost) ---
     with tab3:
-        st.header("Random Forest Regressor")
+        st.header("Trening Modeli Predykcyjnych")
         
-        # Trenowanie modelu (cache'owane, aby nie liczyć przy każdym kliknięciu)
-        @st.cache_resource
-        def train_model(data):
-            X = data.drop('quality', axis=1)
-            y = data['quality']
-            X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+        col_model_L, col_model_R = st.columns([1, 3])
+        
+        with col_model_L:
+            st.subheader("Konfiguracja")
+            # Wybór modelu (Nowość!)
+            model_choice = st.radio("Wybierz algorytm:", ["Random Forest", "XGBoost"])
+            split_size = st.slider("Zbiór testowy (%)", 10, 40, 20)
             
-            model = RandomForestRegressor(n_estimators=100, random_state=42)
+        with col_model_R:
+            # Przygotowanie danych
+            X = df_red.drop('quality', axis=1)
+            y = df_red['quality']
+            X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=split_size/100, random_state=42)
+            
+            # Logika wyboru modelu
+            if model_choice == "Random Forest":
+                model = RandomForestRegressor(n_estimators=100, random_state=42)
+            else:
+                # Konfiguracja XGBoost
+                model = xgb.XGBRegressor(objective='reg:squarederror', n_estimators=100, learning_rate=0.1, random_state=42)
+            
             model.fit(X_train, y_train)
-            
             y_pred = model.predict(X_test)
+            
+            # Metryki
             r2 = r2_score(y_test, y_pred)
             mae = mean_absolute_error(y_test, y_pred)
             
-            return model, r2, mae, X.columns
+            st.write(f"### Wyniki dla: {model_choice}")
+            m1, m2 = st.columns(2)
+            m1.metric("Dokładność (R2 Score)", f"{r2:.2%}")
+            m2.metric("Średni Błąd (MAE)", f"{mae:.3f}")
+            
+            # Feature Importance (Interaktywny wykres Plotly zamiast statycznego)
+            importances = model.feature_importances_
+            feat_df = pd.DataFrame({'Cecha': X.columns, 'Waga': importances}).sort_values(by='Waga', ascending=True)
+            
+            fig_imp = px.bar(feat_df, x='Waga', y='Cecha', orientation='h', title="Co decyduje o jakości? (Feature Importance)")
+            st.plotly_chart(fig_imp, use_container_width=True, height=300)
 
-        model, r2, mae, feature_names = train_model(df_red)
-
-        # Metryki
-        col_m1, col_m2 = st.columns(2)
-        col_m1.metric("R2 Score (Dokładność)", f"{r2:.2%}")
-        col_m2.metric("MAE (Średni błąd)", f"{mae:.2f}")
-        
         st.divider()
+        st.subheader("🧪 Symulator jakości wina")
         
-        # --- WAŻNOŚĆ CECH (NOWOŚĆ) ---
-        st.subheader("🔍 Co najbardziej wpływa na jakość wina?")
-        st.markdown("Wykres pokazuje, które parametry chemiczne były najważniejsze dla modelu przy ocenie wina.")
-        
-        importances = model.feature_importances_
-        indices = np.argsort(importances)[::-1]
-        
-        # Tworzenie DataFrame do wykresu
-        feat_df = pd.DataFrame({
-            'Cecha': [feature_names[i] for i in indices],
-            'Waga': importances[indices]
-        })
-        
-        fig_feat, ax_feat = plt.subplots(figsize=(10, 5))
-        sns.barplot(x='Waga', y='Cecha', data=feat_df, palette='magma', ax=ax_feat)
-        ax_feat.set_title("Feature Importance (Ważność Cech)")
-        st.pyplot(fig_feat)
-        
-        st.info("💡 **Interpretacja:** Cecha na samej górze (zazwyczaj 'Alcohol' lub 'Sulphates') ma największy wpływ na to, czy wino dostanie wysoką ocenę.")
-
-        # Interaktywna predykcja (znana z poprzedniej wersji)
-        st.divider()
-        st.subheader("Symulator jakości")
-        
+        # Inputy
         c_input1, c_input2, c_input3, c_input4 = st.columns(4)
-        val_alc = c_input1.slider("Alcohol", 8.0, 15.0, 10.0)
-        val_sul = c_input2.slider("Sulphates", 0.3, 2.0, 0.6)
-        val_vol = c_input3.slider("Volatile Acidity", 0.1, 1.6, 0.5)
-        val_cit = c_input4.slider("Citric Acid", 0.0, 1.0, 0.25)
+        val_alc = c_input1.slider("Alkohol (%)", 8.0, 15.0, 10.5)
+        val_sul = c_input2.slider("Siarczany", 0.3, 2.0, 0.65)
+        val_vol = c_input3.slider("Kwasowość lotna", 0.1, 1.6, 0.5)
+        val_cit = c_input4.slider("Kwas cytrynowy", 0.0, 1.0, 0.25)
         
-        # Tworzymy wektor wejściowy ze średnimi wartościami
-        input_vector = pd.DataFrame([df_red.drop('quality', axis=1).mean().values], columns=feature_names)
-        # Podmieniamy to co użytkownik zmienił
+        # Wektor wejściowy
+        input_vector = pd.DataFrame([X.mean().values], columns=X.columns)
         input_vector['alcohol'] = val_alc
         input_vector['sulphates'] = val_sul
         input_vector['volatile acidity'] = val_vol
         input_vector['citric acid'] = val_cit
         
-        if st.button("Oblicz prognozowaną ocenę"):
+        if st.button("Oceń jakość"):
             pred_val = model.predict(input_vector)[0]
-            st.metric("Przewidywana Jakość", f"{pred_val:.2f} / 10")
+            
+            col_res1, col_res2 = st.columns([1, 2])
+            with col_res1:
+                st.metric("Przewidywana ocena", f"{pred_val:.2f} / 10")
+            
+            with col_res2:
+                # Gauge Chart (Licznik)
+                fig_gauge = go.Figure(go.Indicator(
+                    mode = "gauge+number",
+                    value = pred_val,
+                    domain = {'x': [0, 1], 'y': [0, 1]},
+                    title = {'text': "Jakość"},
+                    gauge = {
+                        'axis': {'range': [0, 10]},
+                        'bar': {'color': "darkred"},
+                        'steps': [
+                            {'range': [0, 5], 'color': "lightgray"},
+                            {'range': [5, 7], 'color': "gray"},
+                            {'range': [7, 10], 'color': "gold"}],
+                    }
+                ))
+                fig_gauge.update_layout(height=250, margin=dict(l=20, r=20, t=30, b=20))
+                st.plotly_chart(fig_gauge, use_container_width=True)
 
     # --- ZAKŁADKA 4: SOMMELIER ---
     with tab4:
         st.header("Baza wiedzy o parowaniu (Wine Pairing)")
         
-        # Wyszukiwarka
         search_term = st.text_input("Wpisz nazwę potrawy lub wina (np. 'lamb', 'Merlot'):", "")
         
         if search_term:
-            # Filtrowanie po wielu kolumnach
             mask = df_pair.apply(lambda row: row.astype(str).str.contains(search_term, case=False).any(), axis=1)
             results = df_pair[mask]
             
@@ -202,7 +230,6 @@ if df_red is not None and df_pair is not None:
                 st.warning("Nie znaleziono pasujących wyników.")
         else:
             st.info("Zacznij pisać powyżej, aby przeszukać bazę sommeliera.")
-            st.write("Przykładowe dane:")
             st.dataframe(df_pair.head(5))
 
 else:
