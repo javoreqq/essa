@@ -1,162 +1,149 @@
 import streamlit as st
 import pandas as pd
-import seaborn as sns
 import numpy as np
 import matplotlib.pyplot as plt
+import seaborn as sns
+
+# Biblioteki do Machine Learningu (dodane na Twoją prośbę)
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import r2_score, mean_absolute_error
 
 # Konfiguracja strony
-st.set_page_config(page_title="Wino i Jedzenie - Analiza", layout="wide")
+st.set_page_config(page_title="Wino AI - Analiza i Predykcja", layout="wide")
 
-# Funkcja do ładowania danych
+# --- FUNKCJA ŁADUJĄCA DANE ---
 @st.cache_data
 def load_data():
-    # Próba wczytania automatycznego
     try:
         df_quality = pd.read_csv('winequality-red.csv')
         df_pairing = pd.read_csv('wine_food_pairings.csv')
         return df_quality, df_pairing
     except FileNotFoundError:
-        # Jeśli plików nie ma, pozwól użytkownikowi je wgrać
-        st.warning("⚠️ Nie znaleziono plików CSV w folderze aplikacji.")
-        st.markdown("Proszę wgrać je ręcznie poniżej:")
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            file1 = st.file_uploader("Wgraj winequality-red.csv", type='csv')
-        with col2:
-            file2 = st.file_uploader("Wgraj wine_food_pairings.csv", type='csv')
-            
-        if file1 and file2:
-            df_quality = pd.read_csv(file1)
-            df_pairing = pd.read_csv(file2)
-            return df_quality, df_pairing
-        else:
-            return None, None
+        return None, None
 
-    # Tworzenie zakładek
-    tab1, tab2 = st.tabs(["📊 Analiza Jakości (Chemia)", "🍽️ Wirtualny Sommelier (Parowanie)"])
+# Wczytanie danych
+df_red, df_pair = load_data()
 
-    # --- ZAKŁADKA 1: ANALIZA JAKOŚCI ---
+# --- GŁÓWNA LOGIKA APLIKACJI ---
+
+if df_red is not None and df_pair is not None:
+    
+    st.title("🍷 Wino AI: Analiza, Sommelier i Predykcja")
+    st.markdown("Kompletne narzędzie dla enologów i smakoszy.")
+
+    # TERAZ MAMY 3 ZAKŁADKI (doszła Predykcja AI)
+    tab1, tab2, tab3 = st.tabs(["📊 Analiza Danych", "🍽️ Wirtualny Sommelier", "🤖 Predykcja Jakości (ML)"])
+
+    # --- ZAKŁADKA 1: ANALIZA ---
     with tab1:
-        st.header("Analiza czynników wpływających na jakość wina")
+        st.header("Eksploracja danych chemicznych")
         
         col1, col2 = st.columns([1, 2])
-        
         with col1:
-            st.subheader("Przegląd danych")
-            st.write(f"Liczba próbek: {df_red.shape[0]}")
-            if st.checkbox("Pokaż surowe dane"):
-                st.dataframe(df_red.head(10))
-            
-            st.markdown("### Statystyki")
-            st.write(df_red.describe())
-
+            st.write("Statystyki opisowe:")
+            st.dataframe(df_red.describe().T[['mean', 'std', 'min', 'max']])
+        
         with col2:
-            st.subheader("Korelacje")
-            st.markdown("Sprawdź, które parametry chemiczne są ze sobą powiązane.")
-            
-            # Mapa ciepła korelacji
-            fig_corr, ax_corr = plt.subplots(figsize=(10, 6))
-            sns.heatmap(df_red.corr(), annot=True, fmt=".2f", cmap='coolwarm', ax=ax_corr, linewidths=0.5)
+            st.write("Korelacja parametrów z jakością:")
+            # Obliczamy korelację tylko dla kolumny 'quality'
+            corr_matrix = df_red.corr()[['quality']].sort_values(by='quality', ascending=False)
+            fig_corr, ax_corr = plt.subplots(figsize=(6, 8))
+            sns.heatmap(corr_matrix, annot=True, cmap='coolwarm', ax=ax_corr, vmin=-1, vmax=1)
             st.pyplot(fig_corr)
-
-        st.divider()
-        
-        st.subheader("Wpływ parametrów na ocenę jakości (Quality)")
-        st.markdown("Wybierz parametr, aby zobaczyć jak rozkłada się w zależności od oceny jakości wina (skala 3-8).")
-        
-        # Wybór kolumny do analizy (bez kolumny 'quality')
-        features = [col for col in df_red.columns if col != 'quality']
-        selected_feature = st.selectbox("Wybierz parametr chemiczny:", features, index=features.index('alcohol'))
-        
-        col_chart1, col_chart2 = st.columns(2)
-        
-        with col_chart1:
-            # Boxplot
-            fig_box, ax_box = plt.subplots()
-            sns.boxplot(data=df_red, x='quality', y=selected_feature, palette='Reds', ax=ax_box)
-            ax_box.set_title(f"Rozkład: {selected_feature} vs Quality")
-            st.pyplot(fig_box)
-            
-        with col_chart2:
-            # Wyjaśnienie dla użytkownika
-            st.info(f"Wybrano: **{selected_feature}**")
-            avg_val = df_red.groupby('quality')[selected_feature].mean()
-            st.write("Średnia wartość parametru dla każdej oceny jakości:")
-            st.dataframe(avg_val.to_frame(name=f"Średnia {selected_feature}").T)
 
     # --- ZAKŁADKA 2: SOMMELIER ---
     with tab2:
-        st.header("Dobieranie wina do potraw (i odwrotnie)")
+        st.header("System rekomendacji kulinarnych")
         
-        mode = st.radio("Co chcesz zrobić?", ["Mam jedzenie, szukam wina", "Mam wino, szukam jedzenia"])
+        # Prosty interfejs wyboru
+        option = st.selectbox("Wybierz typ wina:", sorted(df_pair['wine_type'].unique()))
         
-        if mode == "Mam jedzenie, szukam wina":
-            col_filter1, col_filter2 = st.columns(2)
-            
-            with col_filter1:
-                cuisines = sorted(df_pair['cuisine'].unique())
-                selected_cuisine = st.selectbox("Wybierz kuchnię:", ["Wszystkie"] + cuisines)
-            
-            with col_filter2:
-                # Filtrowanie listy potraw na podstawie kuchni
-                if selected_cuisine != "Wszystkie":
-                    available_foods = sorted(df_pair[df_pair['cuisine'] == selected_cuisine]['food_item'].unique())
-                else:
-                    available_foods = sorted(df_pair['food_item'].unique())
-                
-                selected_food = st.selectbox("Wybierz konkretne danie:", available_foods)
-            
-            # Wyszukiwanie
-            if st.button("Szukaj wina"):
-                results = df_pair[df_pair['food_item'] == selected_food].sort_values(by='pairing_quality', ascending=False)
-                
-                if not results.empty:
-                    st.success(f"Znaleziono propozycje dla: **{selected_food}**")
-                    
-                    # Wyświetlanie wyników w ładniejszej formie
-                    for _, row in results.iterrows():
-                        with st.expander(f"{row['wine_type']} ({row['wine_category']}) - Ocena: {row['quality_label']}"):
-                            st.write(f"**Ocena numeryczna:** {row['pairing_quality']}/5")
-                            st.write(f"**Opis:** {row['description']}")
-                            if row['pairing_quality'] >= 4:
-                                st.markdown("✅ *Rekomendowane połączenie*")
-                            elif row['pairing_quality'] <= 2:
-                                st.markdown("⚠️ *Odradzane połączenie*")
-                else:
-                    st.warning("Brak danych dla wybranego dania.")
+        st.write(f"Najlepsze potrawy do: **{option}**")
+        
+        # Filtrowanie najlepszych połączeń (ocena >= 4)
+        best_pairs = df_pair[
+            (df_pair['wine_type'] == option) & 
+            (df_pair['pairing_quality'] >= 4)
+        ].sort_values(by='pairing_quality', ascending=False)
+        
+        if not best_pairs.empty:
+            st.dataframe(best_pairs[['food_item', 'cuisine', 'pairing_quality', 'description']], hide_index=True)
+        else:
+            st.info("Brak wybitnych rekomendacji w bazie dla tego szczepu.")
 
-        elif mode == "Mam wino, szukam jedzenia":
-            col_wine1, col_wine2 = st.columns(2)
-            
-            with col_wine1:
-                categories = sorted(df_pair['wine_category'].unique())
-                selected_category = st.selectbox("Kategoria wina:", ["Wszystkie"] + categories)
-            
-            with col_wine2:
-                if selected_category != "Wszystkie":
-                    wine_types = sorted(df_pair[df_pair['wine_category'] == selected_category]['wine_type'].unique())
-                else:
-                    wine_types = sorted(df_pair['wine_type'].unique())
-                
-                selected_wine = st.selectbox("Typ wina:", wine_types)
-                
-            if st.button("Szukaj potraw"):
-                # Szukamy tylko dobrych połączeń (ocena >= 4)
-                results = df_pair[
-                    (df_pair['wine_type'] == selected_wine) & 
-                    (df_pair['pairing_quality'] >= 4)
-                ].sort_values(by='pairing_quality', ascending=False)
-                
-                if not results.empty:
-                    st.success(f"Najlepsze potrawy do: **{selected_wine}**")
-                    st.dataframe(results[['food_item', 'food_category', 'cuisine', 'pairing_quality', 'description']], hide_index=True)
-                else:
-                    st.warning("Nie znaleziono wybitnych połączeń ('Excellent'/'Good') w bazie dla tego wina. Spróbuj innego typu.")
+    # --- ZAKŁADKA 3: MODEL ML (NOWOŚĆ!) ---
+    with tab3:
+        st.header("Przewidywanie jakości wina (Random Forest)")
+        st.markdown("Model uczy się na bazie danych historycznych i ocenia Twoje wino.")
 
-    # Stopka
-    st.sidebar.markdown("---")
-    st.sidebar.info("Aplikacja stworzona na podstawie datasetów Wine Quality & Food Pairings.")
-    
+        # 1. Przygotowanie danych
+        X = df_red.drop('quality', axis=1)
+        y = df_red['quality']
+        
+        # Podział na zbiór treningowy i testowy
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+        
+        # 2. Trenowanie modelu
+        rf_model = RandomForestRegressor(n_estimators=100, random_state=42)
+        rf_model.fit(X_train, y_train)
+        
+        # 3. Ewaluacja modelu (wyświetlamy metryki)
+        y_pred = rf_model.predict(X_test)
+        r2 = r2_score(y_test, y_pred)
+        mae = mean_absolute_error(y_test, y_pred)
+        
+        col_m1, col_m2 = st.columns(2)
+        col_m1.metric("Dokładność modelu (R2 Score)", f"{r2:.2f}")
+        col_m2.metric("Średni błąd (MAE)", f"{mae:.2f}")
+        
+        st.divider()
+        st.subheader("Sprawdź swoje wino!")
+        
+        # 4. Interfejs do wprowadzania danych przez użytkownika
+        # Tworzymy slidery dla 4 najważniejszych cech (żeby nie zaśmiecać ekranu)
+        col_inp1, col_inp2 = st.columns(2)
+        
+        with col_inp1:
+            alcohol = st.slider("Alkohol (%)", 8.0, 15.0, 10.5)
+            sulphates = st.slider("Siarczany (Sulphates)", 0.3, 2.0, 0.65)
+            
+        with col_inp2:
+            volatile_acidity = st.slider("Kwasowość lotna (Volatile Acidity)", 0.1, 1.6, 0.5)
+            citric_acid = st.slider("Kwas cytrynowy", 0.0, 1.0, 0.25)
+            
+        # Pobieramy średnie wartości dla pozostałych cech (żeby model miał komplet danych)
+        input_data = pd.DataFrame([X.mean().values], columns=X.columns)
+        
+        # Nadpisujemy wartościami wybranymi przez użytkownika
+        input_data['alcohol'] = alcohol
+        input_data['sulphates'] = sulphates
+        input_data['volatile acidity'] = volatile_acidity
+        input_data['citric acid'] = citric_acid
+        
+        # 5. Przycisk predykcji
+        if st.button("Oceń jakość wina"):
+            prediction = rf_model.predict(input_data)[0]
+            
+            st.success(f"Przewidywana jakość wina: {prediction:.2f} / 10")
+            
+            if prediction > 6.5:
+                st.balloons()
+                st.markdown("🌟 **To może być wybitne wino!**")
+            elif prediction < 5.0:
+                st.markdown("💀 **Raczej słabej jakości...**")
+            else:
+                st.markdown("🍷 **Solidne, stołowe wino.**")
+
+# Obsługa braku plików (z poprzedniego kroku)
 else:
-    st.stop()
+    st.error("Brak plików danych!")
+    st.info("Wgraj pliki 'winequality-red.csv' oraz 'wine_food_pairings.csv' poniżej:")
+    
+    up1 = st.file_uploader("Plik jakości (winequality-red)", type='csv')
+    up2 = st.file_uploader("Plik parowania (wine_food_pairings)", type='csv')
+    
+    if up1 and up2:
+        df_red = pd.read_csv(up1)
+        df_pair = pd.read_csv(up2)
+        st.rerun()
