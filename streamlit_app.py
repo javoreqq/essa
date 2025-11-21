@@ -10,24 +10,28 @@ st.set_page_config(page_title="Wino i Jedzenie - Analiza", layout="wide")
 # Funkcja do ładowania danych
 @st.cache_data
 def load_data():
+    # Próba wczytania automatycznego
     try:
-        # Wczytanie danych o jakości czerwonego wina
         df_quality = pd.read_csv('winequality-red.csv')
-        
-        # Wczytanie danych o parowaniu jedzenia (może wymagać dostosowania separatora jeśli plik jest nietypowy)
         df_pairing = pd.read_csv('wine_food_pairings.csv')
-        
         return df_quality, df_pairing
-    except FileNotFoundError as e:
-        st.error(f"Nie znaleziono plików CSV. Upewnij się, że są w folderze z aplikacją. Błąd: {e}")
-        return None, None
-
-df_red, df_pair = load_data()
-
-if df_red is not None and df_pair is not None:
-
-    st.title("🍷 Asystent Winiarski i Analityk")
-    st.markdown("Ta aplikacja łączy analizę chemiczną czerwonego wina z bazą wiedzy o parowaniu potraw.")
+    except FileNotFoundError:
+        # Jeśli plików nie ma, pozwól użytkownikowi je wgrać
+        st.warning("⚠️ Nie znaleziono plików CSV w folderze aplikacji.")
+        st.markdown("Proszę wgrać je ręcznie poniżej:")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            file1 = st.file_uploader("Wgraj winequality-red.csv", type='csv')
+        with col2:
+            file2 = st.file_uploader("Wgraj wine_food_pairings.csv", type='csv')
+            
+        if file1 and file2:
+            df_quality = pd.read_csv(file1)
+            df_pairing = pd.read_csv(file2)
+            return df_quality, df_pairing
+        else:
+            return None, None
 
     # Tworzenie zakładek
     tab1, tab2 = st.tabs(["📊 Analiza Jakości (Chemia)", "🍽️ Wirtualny Sommelier (Parowanie)"])
